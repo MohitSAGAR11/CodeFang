@@ -16,6 +16,7 @@
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=fff">
   <img alt="AI SDK" src="https://img.shields.io/badge/AI%20SDK-v7-8b5cf6">
   <img alt="OpenRouter" src="https://img.shields.io/badge/OpenRouter-any%20model-a78bfa">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-81%20passing-3fb950">
 </p>
 
 ---
@@ -34,6 +35,11 @@ decide what lands. Reject, and the staging area is simply thrown away.
                                     │
                                     └── reject ──▶ discarded, nothing written
 ```
+
+The overlay is the source of truth mid-run: a file the agent just staged reads
+back as the staged version, and one it staged for deletion reads back as gone —
+so it can build on its own work before any of it exists on disk.
+That guarantee is [covered by tests](#tests), not just asserted here.
 
 ---
 
@@ -100,7 +106,7 @@ Create a `.env` in the project root:
 
 | Tool | Does | Effect |
 | --- | --- | --- |
-| `read_file` | Read one text file | reads |
+| `read_file` | Read one text file — the staged version if one exists | reads |
 | `list_files` | List a directory, optionally recursive | reads |
 | `search_files` | Glob match, optional content filter | reads |
 | `analyze_codebase` | File and directory counts | reads |
@@ -141,6 +147,28 @@ Which modes get what:
 
 ---
 
+## Tests
+
+```bash
+bun test
+```
+
+81 tests, nothing to install — Bun's runner is built in. They concentrate on the
+places where a bug would be expensive rather than chasing coverage percentages:
+
+| Suite | Covers |
+| --- | --- |
+| `modes/agent/tool-executor.test.ts` | workspace jail, exclusion policy, staging, apply, shell approval |
+| `modes/agent/review-groups.test.ts` | how pending actions collapse into reviewable diffs |
+| `modes/agent/action-tracker.test.ts` | the action log and approval bookkeeping |
+| `tui/agent-stream.test.ts` | spinner handoff and tool-call rendering |
+
+The security-critical ones assert exactly what the **Safety rails** below claim:
+a path that escapes the workspace never resolves, an excluded path is never read,
+and a shell command that was not approved never runs.
+
+---
+
 ## Project layout
 
 ```
@@ -152,6 +180,7 @@ tui/
   spinner.ts              braille spinner with swappable status labels
   agent-stream.ts         drives the spinner from a live agent stream
   terminal-md.ts          markdown → ANSI
+  *.test.ts               stream rendering tests
 modes/
   cli.ts                  sub-mode picker
   agent/
@@ -161,6 +190,7 @@ modes/
     review-groups.ts      collapse pending actions into reviewable diffs
     approval.ts           the terminal approval flow
     diff-view.ts          unified patches
+    *.test.ts             jail, staging, grouping and approval tests
   plan/                   planner, step selection, web tools
   ask/                    read-only Q&A
   telegram/               bot, handlers, plan and approval sessions
