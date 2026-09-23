@@ -1,66 +1,8 @@
 import { select, isCancel } from "@clack/prompts";
-import chalk from "chalk";
 import type { ActionTracker } from "./action-tracker.ts";
-import type { ActionLog } from "./types.ts";
-import { composeBeforeAfter, formatPatch } from "./diff-view.ts";
+import { groupPending } from "./review-groups.ts";
 import { renderTerminalMarkdown } from "../../tui/terminal-md.ts";
-
-interface ReviewGroup {
-  label: string;
-  actionIds: string[];
-  patch: string | null;
-}
-
-function groupPending(pending: ActionLog[]): ReviewGroup[] {
-  const byPath = new Map<string, ActionLog[]>();
-  const shells: ActionLog[] = [];
-
-  for (const a of pending) {
-    if (a.type === "tool_execute") {
-      shells.push(a);
-      continue;
-    }
-    const key = a.path;
-    if (!byPath.has(key)) byPath.set(key, []);
-    byPath.get(key)!.push(a);
-  }
-
-  const groups: ReviewGroup[] = [];
-
-  const pathEntries = [...byPath.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
-  for (const [p, acts] of pathEntries) {
-    const sorted = acts.sort(
-      (x, y) => x.timestamp.getTime() - y.timestamp.getTime(),
-    );
-    const ids = sorted.map((x) => x.id);
-
-    if (sorted.every((x) => x.type === "folder_create")) {
-      groups.push({
-        label: `Create folder: ${p}`,
-        actionIds: ids,
-        patch: null,
-      });
-      continue;
-    }
-
-    const { before, after } = composeBeforeAfter(sorted);
-    const patch = formatPatch(p, before, after);
-    const kinds = [...new Set(sorted.map((x) => x.type))].join(", ");
-    groups.push({ label: `${p} (${kinds})`, actionIds: ids, patch });
-  }
-
-  for (const s of shells) {
-    groups.push({
-      label: `Shell: ${s.details.command ?? "(no command)"}`,
-      actionIds: [s.id],
-      patch: null,
-    });
-  }
-
-  return groups;
-}
+import { ask, c, GLYPH } from "../../tui/theme.ts";
 
 export async function runApprovalFlow(
   tracker: ActionTracker,
@@ -69,17 +11,17 @@ export async function runApprovalFlow(
 
   if (pending.length === 0) {
     console.log(
-      chalk.dim("\nNo staged file, folder, or shell changes to review.\n"),
+      c.muted(`\n${GLYPH.dot} No staged file, folder, or shell changes.\n`),
     );
     return false;
   }
 
   const choice = await select({
-    message: "Apply staged changes?",
+    message: ask(`Apply ${pending.length} staged change(s)?`),
     options: [
       { value: "all", label: "Approve and apply all" },
-      { value: "select", label: "Review one by one" },
-      { value: "cancel", label: "Cancel" },
+      { value: "select", label: "Review one by one", hint: "inspect each diff" },
+      { value: "cancel", label: "Cancel", hint: "discard staging" },
     ],
   });
 
@@ -96,7 +38,7 @@ export async function runApprovalFlow(
   for (const g of groupPending(pending)) {
     while (true) {
       const opt = await select({
-        message: chalk.bold(g.label),
+        message: `${c.accent(GLYPH.tool)} ${c.brand(g.label)}`,
         options: [
           { value: "accept", label: "Accept" },
           { value: "diff", label: "Show diff", hint: g.patch ? "" : "N/A" },

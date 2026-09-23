@@ -7,8 +7,9 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { z } from "zod";
-import chalk from "chalk";
 import { getAgentModel } from "../../ai/ai.config.ts";
+import { Spinner } from "../../tui/spinner.ts";
+import { toolLabel } from "../../tui/agent-stream.ts";
 import { ActionTracker } from "../agent/action-tracker.ts";
 import { ToolExecutor } from "../agent/tool-executor.ts";
 import { defaultAgentConfig } from "../agent/types.ts";
@@ -119,16 +120,26 @@ export async function generatePlan(goal: string) {
 
   const tools = { ...readOnlyTools(executor) , ...(hasWeb ? createWebTools(tracker) : {}) };
 
-  console.log(chalk.cyan("\n🔍 Researching & drafting a plan…\n"));
+  const spinner = new Spinner();
+  spinner.start("Researching & drafting a plan…");
 
-  const result = await generateText({
-    model,
-    tools,
-    stopWhen:stepCountIs(20),
-    system:PLAN_INSTRUCTIONS(config.codebasePath , hasWeb),
-    prompt:`User goal: \n${goal}`,
-    output:Output.object({schema:planSchema})
-  });
+  let result;
+  try {
+    result = await generateText({
+      model,
+      tools,
+      stopWhen: stepCountIs(20),
+      system: PLAN_INSTRUCTIONS(config.codebasePath, hasWeb),
+      prompt: `User goal: \n${goal}`,
+      output: Output.object({ schema: planSchema }),
+      onStepFinish: ({ toolCalls }) => {
+        const last = toolCalls.at(-1);
+        if (last) spinner.update(toolLabel(last.toolName));
+      },
+    });
+  } finally {
+    spinner.stop();
+  }
 
   const validated = planSchema.parse(result.output);
 

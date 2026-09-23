@@ -1,35 +1,32 @@
-import chalk from "chalk";
 import { select, isCancel } from "@clack/prompts";
 import { runAgentMode } from "./agent/orchestrator";
 import { runAskMode } from "./ask/orchestartor";
 import { runPlanMode } from "./plan/orchestrator";
+import { ask, c, GLYPH, printError } from "../tui/theme.ts";
 
 export async function runCliMode() {
   while (true) {
     const mode = await select({
-      message: "Choose CLI sub-mode",
+      message: ask("Choose a CLI mode"),
       options: [
-        { value: "agent", label: "Agent Mode" },
-        { value: "plan", label: "Plan Mode" },
-        { value: "ask", label: "Ask Mode" },
-        { value: "back", label: "← Back to main menu" },
+        { value: "agent", label: "Agent", hint: "make changes, then review" },
+        { value: "plan", label: "Plan", hint: "break a goal into steps" },
+        { value: "ask", label: "Ask", hint: "questions, read-only" },
+        { value: "back", label: `${GLYPH.prompt} Back to main menu` },
       ],
     });
 
-    if (isCancel(mode) || mode === "back") return;
-
-    if (mode === "agent") {
-      await runAgentMode();
-    }
-    if (mode === "ask") {
-      await runAskMode()
-    }
-    if (mode === "plan") {
-      await runPlanMode()
+    if (isCancel(mode) || mode === "back") {
+      console.log(c.muted(`\n${GLYPH.fang} Back.\n`));
+      return;
     }
 
-    if (mode !== "agent" && mode !== "plan" && mode !== "ask") {
-      console.log(chalk.yellow("\nThat mode is not implemented yet.\n"));
+    try {
+      if (mode === "agent") await runAgentMode();
+      else if (mode === "plan") await runPlanMode();
+      else if (mode === "ask") await runAskMode();
+    } catch (err) {
+      printError(err);
     }
   }
 }

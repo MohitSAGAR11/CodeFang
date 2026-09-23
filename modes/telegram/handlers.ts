@@ -11,7 +11,17 @@ import {
   refreshPlanUi,
   type PlanSession,
 } from "./plan-session";
-import { approvalDiff, approvalSessions } from "./approval-session";
+import {
+  applyApproval,
+  approvalDiff,
+  approvalSessions,
+  currentGroup,
+  decideCurrent,
+  groupKeyboard,
+  groupMessage,
+  resultMessage,
+  setAll,
+} from "./approval-session";
 
 export function registerHandlers(bot: Telegraf) {
   bot.command("start", async (ctx) => {
@@ -122,7 +132,50 @@ export function registerHandlers(bot: Telegraf) {
     const s = approvalSessions.get(ctx.chat!.id);
     if (!s) return ctx.answerCbQuery();
     await ctx.answerCbQuery();
-    await ctx.reply(clip(approvalDiff(s.pending)));
+    await ctx.reply(clip(approvalDiff(s)));
+  });
+
+  bot.action("approval_review", async (ctx) => {
+    if (!isOwner(ctx.chat!.id)) return ctx.answerCbQuery();
+    const s = approvalSessions.get(ctx.chat!.id);
+    if (!s) return ctx.answerCbQuery();
+
+    s.cursor = 0;
+    await ctx.editMessageText(groupMessage(s), {
+      reply_markup: groupKeyboard(s).reply_markup,
+    });
+    await ctx.answerCbQuery();
+  });
+
+  bot.action("approval_step_diff", async (ctx) => {
+    if (!isOwner(ctx.chat!.id)) return ctx.answerCbQuery();
+    const s = approvalSessions.get(ctx.chat!.id);
+    if (!s) return ctx.answerCbQuery();
+    await ctx.answerCbQuery();
+    const g = currentGroup(s);
+    if (g?.patch) await ctx.reply(clip(g.patch));
+  });
+
+  bot.action(/^approval_step_(accept|reject)$/, async (ctx) => {
+    if (!isOwner(ctx.chat!.id)) return ctx.answerCbQuery();
+    const s = approvalSessions.get(ctx.chat!.id);
+    if (!s) return ctx.answerCbQuery();
+
+    const accept = ctx.match[1] === "accept";
+    const done = decideCurrent(s, accept);
+    await ctx.answerCbQuery(accept ? "Accepted" : "Rejected");
+
+    if (!done) {
+      await ctx.editMessageText(groupMessage(s), {
+        reply_markup: groupKeyboard(s).reply_markup,
+      });
+      return;
+    }
+
+    approvalSessions.delete(ctx.chat!.id);
+    const { applied, errors } = applyApproval(s);
+    await ctx.editMessageText(clip(resultMessage(applied, errors)));
+    if (errors.length) console.error(errors);
   });
 
   bot.action("approval_accept", async (ctx) => {
@@ -131,11 +184,10 @@ export function registerHandlers(bot: Telegraf) {
     if (!s) return ctx.answerCbQuery();
 
     approvalSessions.delete(ctx.chat!.id);
-    for (const a of s.pending) s.tracker.updateStatus(a.id, "approved", true);
-    const { errors } = s.executor.applyApprovedFromTracker();
-    s.executor.clearStaging();
+    setAll(s, true);
+    const { applied, errors } = applyApproval(s);
 
-    await ctx.editMessageText("✅ All changes applied.");
+    await ctx.editMessageText(clip(resultMessage(applied, errors)));
     await ctx.answerCbQuery("Applied!");
     if (errors.length) console.error(errors);
   });
@@ -146,7 +198,7 @@ export function registerHandlers(bot: Telegraf) {
     if (!s) return ctx.answerCbQuery();
 
     approvalSessions.delete(ctx.chat!.id);
-    for (const a of s.pending) s.tracker.updateStatus(a.id, "rejected", false);
+    setAll(s, false);
     s.executor.clearStaging();
 
     await ctx.editMessageText("❌ All changes rejected. Nothing was applied.");

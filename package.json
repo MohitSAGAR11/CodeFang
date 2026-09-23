@@ -3,7 +3,12 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start": "bun run index.ts wakeup",
+    "typecheck": "tsc --noEmit"
+  },
   "bin": {
+    "codefang": "./index.ts",
     "codefang-build": "./index.ts"
   },
   "devDependencies": {

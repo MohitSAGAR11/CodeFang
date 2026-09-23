@@ -1,19 +1,20 @@
-import chalk from "chalk";
 import { text, isCancel } from "@clack/prompts";
+import { stepCountIs, ToolLoopAgent } from "ai";
 import { defaultAgentConfig } from "./types";
 import { ActionTracker } from "./action-tracker";
 import { ToolExecutor } from "./tool-executor";
 import { createAgentTools } from "./agent-tools";
-import { stepCountIs, ToolLoopAgent } from "ai";
 import { getAgentModel } from "../../ai";
-import { renderTerminalMarkdown } from "../../tui/terminal-md";
 import { runApprovalFlow } from "./approval";
+import { Spinner } from "../../tui/spinner.ts";
+import { renderAgentStream } from "../../tui/agent-stream.ts";
+import { ask, c, GLYPH, printDone, printError, printSection } from "../../tui/theme.ts";
 
 export async function runAgentMode() {
-  console.log(chalk.bold("\n🤖 Agent Mode\n"));
+  printSection("Agent", "stage changes, review, then apply");
 
   const goal = await text({
-    message: "What would you like the agent to do?",
+    message: ask("What would you like the agent to do?"),
     placeholder: "Concrete task for this codebase…",
   });
 
@@ -34,21 +35,17 @@ export async function runAgentMode() {
     tools,
   });
 
-  const result = await agent.generate({
-    prompt: goal.trim(),
-    onStepFinish: ({ toolCalls }) => {
-      for (const tc of toolCalls) {
-        const preview = JSON.stringify(tc.input).slice(0, 160);
-        console.log(
-          chalk.green("  ✓"),
-          chalk.bold(String(tc.toolName)),
-          chalk.dim(preview + (preview.length >= 160 ? "..." : "")),
-        );
-      }
-    },
-  });
+  const spinner = new Spinner();
+  spinner.start("Thinking…");
 
-  if (result.text?.trim()) console.log(renderTerminalMarkdown(result.text));
+  try {
+    const result = await agent.stream({ prompt: goal.trim() });
+    await renderAgentStream(result.fullStream, spinner);
+  } catch (err) {
+    spinner.stop();
+    printError(err);
+    return executor.clearStaging();
+  }
 
   const ok = await runApprovalFlow(tracker);
   if (!ok) return executor.clearStaging();
@@ -56,10 +53,11 @@ export async function runAgentMode() {
   const { errors } = executor.applyApprovedFromTracker();
 
   if (errors.length) {
-    console.log(chalk.red("\nSome operations reported errors:\n"));
-    for (const e of errors) console.log(chalk.red(`  • ${e}`));
+    console.log(c.warn(`\n${GLYPH.err} Some operations reported errors:\n`));
+    for (const e of errors) console.log(c.error(`  ${GLYPH.dot} ${e}`));
+    console.log();
   } else {
-    console.log(chalk.green("\n✓ Applied.\n"));
+    printDone("Applied.");
   }
 
   executor.clearStaging();

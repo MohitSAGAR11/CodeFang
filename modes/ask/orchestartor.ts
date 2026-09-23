@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { confirm, isCancel, text } from "@clack/prompts";
 import { ToolLoopAgent, stepCountIs, tool } from "ai";
 import { z } from "zod";
@@ -6,9 +5,11 @@ import { getAgentModel } from "../../ai/ai.config.ts";
 import { ActionTracker } from "../agent/action-tracker.ts";
 import { ToolExecutor } from "../agent/tool-executor.ts";
 import { defaultAgentConfig } from "../agent/types.ts";
-import { renderTerminalMarkdown } from "../../tui/terminal-md.ts";
 import { runApprovalFlow } from "../agent/approval.ts";
 import { createWebTools } from "../plan/web-tools.ts";
+import { Spinner } from "../../tui/spinner.ts";
+import { renderAgentStream } from "../../tui/agent-stream.ts";
+import { ask, printError, printSection } from "../../tui/theme.ts";
 
 function createAskTools(executor: ToolExecutor) {
   return {
@@ -77,9 +78,12 @@ function asMd(question: string, answer: string): string {
 }
 
 export async function runAskMode() {
-  console.log(chalk.bold("\n❓ Ask Mode\n"));
+  printSection("Ask", "read-only questions about this codebase");
 
-  const question = await text({ message: "What do you want to ask?" });
+  const question = await text({
+    message: ask("What do you want to ask?"),
+    placeholder: "How does the approval flow work?",
+  });
   if (isCancel(question) || !question.trim()) return;
 
   const config = defaultAgentConfig();
@@ -102,18 +106,29 @@ export async function runAskMode() {
     tools,
   });
 
-  const result = await agent.generate({ prompt: question.trim() });
-  const answer = result.text?.trim() || "(no answer)";
-  console.log("\n" + renderTerminalMarkdown(answer) + "\n");
+  const spinner = new Spinner();
+  spinner.start("Thinking…");
+
+  let answer = "";
+  try {
+    const result = await agent.stream({ prompt: question.trim() });
+    answer = (await renderAgentStream(result.fullStream, spinner)).trim();
+  } catch (err) {
+    spinner.stop();
+    printError(err);
+    return executor.clearStaging();
+  }
+
+  if (!answer) return;
 
   const wantsSave = await confirm({
-    message: "Save this answer to a .md file in the current directory?",
+    message: ask("Save this answer to a .md file in the current directory?"),
     initialValue: false,
   });
   if (isCancel(wantsSave) || !wantsSave) return;
 
   const filename = await text({
-    message: "Filename",
+    message: ask("Filename"),
     initialValue: "ask.md",
     validate: (v) => {
       const s = (v ?? "").trim();
