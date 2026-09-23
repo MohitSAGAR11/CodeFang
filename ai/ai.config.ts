@@ -6,7 +6,7 @@ export function getAgentModel() {
   const modelId = process.env.OPENROUTER_DEFAULT_MODEL;
 
   if (!modelId) {
-    throw new Error("OPENROUTER_MODEL is not defined");
+    throw new Error("OPENROUTER_DEFAULT_MODEL is not defined");
   }
   
   return provier(modelId);

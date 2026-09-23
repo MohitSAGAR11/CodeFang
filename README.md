@@ -171,6 +171,7 @@ modes/
 ## Scripts
 
 ```bash
-bun start        # launch the CLI
+bun start          # launch the CLI
+bun test           # run the test suite
 bun run typecheck  # tsc --noEmit
 ```

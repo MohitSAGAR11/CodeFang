@@ -82,14 +82,33 @@ export class ToolExecutor {
   readFile(rel: string): string {
     this.assertNotExcluded(rel, "read_file");
     const abs = this.resolveSafe(rel);
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+    const key = this.norm(rel);
+
+    // Staging wins over disk, so the agent can read back what it just wrote
+    // — and cannot read what it just staged for deletion.
+    if (this.deleted.has(key)) {
       throw new Error(`File not found: ${rel}`);
     }
-    const st = fs.statSync(abs);
-    if (st.size > this.config.maxFileSizeToRead) {
-      throw new Error(`File too large: ${rel}`);
+
+    const staged = this.overlay.get(key);
+    let text: string;
+
+    if (staged !== undefined) {
+      if (Buffer.byteLength(staged, "utf8") > this.config.maxFileSizeToRead) {
+        throw new Error(`File too large: ${rel}`);
+      }
+      text = staged;
+    } else {
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+        throw new Error(`File not found: ${rel}`);
+      }
+      // Check size before reading, so a huge file is never pulled into memory.
+      if (fs.statSync(abs).size > this.config.maxFileSizeToRead) {
+        throw new Error(`File too large: ${rel}`);
+      }
+      text = fs.readFileSync(abs, "utf8");
     }
-    const text = fs.readFileSync(abs, "utf8");
+
     this.tracker.log({
       type: "code_analysis",
       path: this.norm(rel),

@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts wakeup",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "bin": {

@@ -26,33 +26,34 @@ function hookCursorRestore(): void {
  * leaves fragments behind when real output arrives — call `log()` to print
  * above a running spinner, or `stop()` before handing the terminal to a
  * prompt.
+ *
+ * Off a TTY (CI, piped output) there is no animation: each new status label
+ * is printed once as a plain line. `isActive` tracks the spinner's logical
+ * state, so it reads the same in both modes.
  */
 export class Spinner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private frame = 0;
   private startedAt = 0;
   private label = "";
+  private active = false;
   private painted = false;
   private announced = "";
   private readonly tty = Boolean(process.stdout.isTTY);
 
   get isActive(): boolean {
-    return this.timer !== null;
+    return this.active;
   }
 
   start(label: string): void {
-    if (this.timer) return this.update(label);
+    if (this.active) return this.update(label);
+
+    this.active = true;
     this.label = label;
     this.frame = 0;
     this.startedAt = Date.now();
 
-    if (!this.tty) {
-      if (this.announced !== label) {
-        this.announced = label;
-        console.log(c.muted(`${GLYPH.fang} ${label}`));
-      }
-      return;
-    }
+    if (!this.tty) return this.announce(label);
 
     hookCursorRestore();
     process.stdout.write(HIDE_CURSOR);
@@ -67,10 +68,12 @@ export class Spinner {
 
   /** Swap the status label; starts the spinner if it is not running. */
   update(label: string): void {
-    if (this.label === label && this.timer) return;
-    if (!this.timer) return this.start(label);
+    if (!this.active) return this.start(label);
+    if (this.label === label) return;
+
     this.label = label;
-    this.render();
+    if (this.tty) this.render();
+    else this.announce(label);
   }
 
   /** Print a line above the spinner without disturbing the animation. */
@@ -93,6 +96,7 @@ export class Spinner {
       process.stdout.write(CLEAR_LINE + SHOW_CURSOR);
       this.painted = false;
     }
+    this.active = false;
     this.announced = "";
     if (final) console.log(final);
   }
@@ -100,6 +104,12 @@ export class Spinner {
   /** Stop and report how long the work took. */
   done(message: string): void {
     this.stop(`${c.success(GLYPH.ok)} ${c.muted(message)} ${this.elapsedTag()}`);
+  }
+
+  private announce(label: string): void {
+    if (this.announced === label) return;
+    this.announced = label;
+    console.log(c.muted(`${GLYPH.fang} ${label}`));
   }
 
   private elapsedTag(): string {
