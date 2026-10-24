@@ -19,6 +19,14 @@
   <img alt="Tests" src="https://img.shields.io/badge/tests-81%20passing-3fb950">
 </p>
 
+<p align="center">
+  <a href="https://mohitsagar11.github.io/videos/codefang.mp4">
+    <img src="docs/demo.jpg" alt="CodeFang: 20-second demo video, click to play" width="760">
+  </a>
+  <br>
+  <sub>▶ 20-second demo (click the image to play) · file: <a href="docs/demo.mp4"><code>docs/demo.mp4</code></a></sub>
+</p>
+
 ---
 
 ## What it is
