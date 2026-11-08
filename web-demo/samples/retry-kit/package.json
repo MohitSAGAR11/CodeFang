@@ -1,0 +1,11 @@
+{
+  "name": "retry-kit",
+  "version": "0.3.1",
+  "description": "Tiny retry helper with exponential backoff and jitter",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "license": "MIT"
+}

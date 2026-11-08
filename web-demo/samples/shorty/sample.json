@@ -1,0 +1,19 @@
+{
+  "name": "shorty",
+  "tagline": "A tiny URL shortener in Go. Trusts every URL it's given.",
+  "language": "Go",
+  "order": 3,
+  "prompts": {
+    "ask": [
+      "Is the store safe under concurrent requests?",
+      "How are short codes generated, and can they collide?"
+    ],
+    "plan": [
+      "Add expiring links with a per-link TTL"
+    ],
+    "agent": [
+      "Only accept http and https URLs; reject anything else with a 400 and a test",
+      "Fix the data race in Store.Get"
+    ]
+  }
+}

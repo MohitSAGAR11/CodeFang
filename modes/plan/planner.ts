@@ -3,8 +3,8 @@ import {
   extractJsonMiddleware,
   generateText,
   stepCountIs,
-  tool,
   wrapLanguageModel,
+  type ToolSet,
 } from "ai";
 import { z } from "zod";
 import { getAgentModel } from "../../ai/ai.config.ts";
@@ -13,6 +13,7 @@ import { toolLabel } from "../../tui/agent-stream.ts";
 import { ActionTracker } from "../agent/action-tracker.ts";
 import { ToolExecutor } from "../agent/tool-executor.ts";
 import { defaultAgentConfig } from "../agent/types.ts";
+import { createReadOnlyTools } from "../agent/agent-tools.ts";
 import type { Plan, PlanStep } from "./types.ts";
 import { createWebTools } from "./web-tools.ts";
 
@@ -31,125 +32,95 @@ const planSchema = z.object({
     .max(15),
 });
 
-function readOnlyTools(executor: ToolExecutor) {
-  return {
-    read_file: tool({
-      description:
-        "Read a text file from the workspace. Use a path relative to the project root.",
-      inputSchema: z.object({
-        path: z.string().describe("Relative file path"),
-      }),
-      execute: async ({ path: p }) => executor.readFile(p),
-    }),
-
-    list_files: tool({
-      description: "List files and directories under a path.",
-      inputSchema: z.object({
-        path: z.string(),
-        recursive: z.boolean().optional().default(false),
-      }),
-      execute: async ({ path: p, recursive }) =>
-        executor.listFiles(p, recursive),
-    }),
-
-    search_files: tool({
-      description:
-        'Find files matching a glob pattern (e.g. "*.ts", "**/*.md"). Optional content substring filter.',
-      inputSchema: z.object({
-        root: z.string().describe("Directory to search, relative to root"),
-        pattern: z
-          .string()
-          .describe("Glob-like pattern using * and ** (forward slashes)"),
-        content_contains: z.string().optional(),
-      }),
-      execute: async ({ root, pattern, content_contains }) =>
-        executor.searchFiles(root, pattern, content_contains),
-    }),
-
-    analyze_codebase: tool({
-      description:
-        "Summarize structure: file counts, size, extensions. Read-only.",
-      inputSchema: z.object({
-        path: z.string().default("."),
-      }),
-      execute: async ({ path: p }) => executor.analyzeCodebase(p),
-    }),
-
-    list_skills: tool({
-      description:
-        "List absolute paths to SKILL.md files under configured skill directories (Cursor / Claude).",
-      inputSchema: z.object({}),
-      execute: async () => executor.listSkills(),
-    }),
-
-    read_skill: tool({
-      description:
-        "Read a SKILL.md file. Path must be absolute and under skill roots, or use a path returned by list_skills.",
-      inputSchema: z.object({
-        path: z.string(),
-      }),
-      execute: async ({ path: p }) => executor.readSkill(p),
-    }),
-  };
-}
-
 const PLAN_INSTRUCTIONS = (codebase: string, hasWeb: boolean) =>
   [
     "You are a Plan-Mode planner. You DO NOT modify files.",
     `Workspace: ${codebase}`,
     "Use read-only tools for codebase/skills research.",
     hasWeb
-      ? "Web tools are available (web_search/web_crawl/fetch_url). Use only when needed."
+      ? "Web tools are available. Use them only when needed."
       : "Web tools are unavailable (no FIRECRAWL_API_KEY).",
     "Output must match the provided JSON schema.",
     "Keep it short: 1–15 steps.",
   ].join("\n");
 
-export async function generatePlan(goal: string) {
+type WrappableModel = Parameters<typeof wrapLanguageModel>[0]["model"];
+
+export interface DraftPlanOptions {
+  goal: string;
+  model: WrappableModel;
+  tools: ToolSet;
+  /** Shown to the model as the workspace (a path, or a repo name). */
+  workspaceLabel: string;
+  hasWeb: boolean;
+  maxSteps?: number;
+  maxOutputTokens?: number;
+  abortSignal?: AbortSignal;
+  /** Called with each tool name the planner uses while researching. */
+  onToolCall?: (toolName: string, input: unknown) => void;
+}
+
+/**
+ * Research with read-only tools, then return a validated 1–15 step plan.
+ * Shared by the terminal planner and the web playground.
+ */
+export async function draftPlan(opts: DraftPlanOptions): Promise<Plan> {
+  const model = wrapLanguageModel({
+    model: opts.model,
+    middleware: extractJsonMiddleware(),
+  });
+
+  const result = await generateText({
+    model,
+    tools: opts.tools,
+    stopWhen: stepCountIs(opts.maxSteps ?? 20),
+    maxOutputTokens: opts.maxOutputTokens,
+    abortSignal: opts.abortSignal,
+    system: PLAN_INSTRUCTIONS(opts.workspaceLabel, opts.hasWeb),
+    prompt: `User goal: 
+${opts.goal}`,
+    output: Output.object({ schema: planSchema }),
+    onStepFinish: ({ toolCalls }) => {
+      for (const call of toolCalls) opts.onToolCall?.(call.toolName, call.input);
+    },
+  });
+
+  const validated = planSchema.parse(result.output);
+
+  const steps: PlanStep[] = validated.steps.map((s, i) => ({
+    id: `step-${i + 1}`,
+    title: s.title,
+    description: s.description,
+    hints: s.hints,
+    complexity: s.complexity,
+  }));
+
+  return { goal: opts.goal, researchSummary: validated.researchSummary, steps };
+}
+
+export async function generatePlan(goal: string): Promise<Plan> {
   const config = defaultAgentConfig();
   const tracker = new ActionTracker();
   const executor = new ToolExecutor(tracker, config);
-
-
   const hasWeb = !!process.env.FIRECRAWL_API_KEY;
-  const model = wrapLanguageModel({
-    model:getAgentModel(),
-    middleware:extractJsonMiddleware()
-  })
 
-
-  const tools = { ...readOnlyTools(executor) , ...(hasWeb ? createWebTools(tracker) : {}) };
+  const tools = {
+    ...createReadOnlyTools(executor),
+    ...(hasWeb ? createWebTools(tracker) : {}),
+  };
 
   const spinner = new Spinner();
   spinner.start("Researching & drafting a plan…");
-
-  let result;
   try {
-    result = await generateText({
-      model,
+    return await draftPlan({
+      goal,
+      model: getAgentModel(),
       tools,
-      stopWhen: stepCountIs(20),
-      system: PLAN_INSTRUCTIONS(config.codebasePath, hasWeb),
-      prompt: `User goal: \n${goal}`,
-      output: Output.object({ schema: planSchema }),
-      onStepFinish: ({ toolCalls }) => {
-        const last = toolCalls.at(-1);
-        if (last) spinner.update(toolLabel(last.toolName));
-      },
+      workspaceLabel: config.codebasePath,
+      hasWeb,
+      onToolCall: (name) => spinner.update(toolLabel(name)),
     });
   } finally {
     spinner.stop();
   }
-
-  const validated = planSchema.parse(result.output);
-
-  const steps:PlanStep[] = validated.steps.map((s , i)=>({
-    id:`step-${i+1}`,
-    title:s.title,
-    description:s.description,
-    hints:s.hints,
-    complexity:s.complexity
-  }));
-
-  return {goal , researchSummary:validated.researchSummary , steps}
 }

@@ -16,7 +16,7 @@
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=fff">
   <img alt="AI SDK" src="https://img.shields.io/badge/AI%20SDK-v7-8b5cf6">
   <img alt="OpenRouter" src="https://img.shields.io/badge/OpenRouter-any%20model-a78bfa">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-81%20passing-3fb950">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-163%20passing-3fb950">
 </p>
 
 <p align="center">
@@ -161,7 +161,7 @@ Which modes get what:
 bun test
 ```
 
-81 tests, nothing to install — Bun's runner is built in. They concentrate on the
+163 tests, nothing to install — Bun's runner is built in. They concentrate on the
 places where a bug would be expensive rather than chasing coverage percentages:
 
 | Suite | Covers |
@@ -170,10 +170,72 @@ places where a bug would be expensive rather than chasing coverage percentages:
 | `modes/agent/review-groups.test.ts` | how pending actions collapse into reviewable diffs |
 | `modes/agent/action-tracker.test.ts` | the action log and approval bookkeeping |
 | `tui/agent-stream.test.ts` | spinner handoff and tool-call rendering |
+| `web-demo/server/memory-fs.test.ts` | the virtual repo's path jail (`..`, absolute, drive letters, NUL) and size caps |
+| `web-demo/server/playground-overlay.test.ts` | overlay over the virtual repo: nothing lands before review, no disk writes, no shell or skill tools |
+| `web-demo/server/api.test.ts` | full SSE runs through the real agent loop (scripted model), review/apply, patch, rate limits, BYOK, model cap |
+| `web-demo/server/github.test.ts` | repo URL parsing (SSRF), tar parsing, traversal entries, gzip bombs, size caps |
+| `web-demo/server/rate-limit.test.ts` | sliding-window limiter and the daily budget |
 
 The security-critical ones assert exactly what the **Safety rails** below claim:
 a path that escapes the workspace never resolves, an excluded path is never read,
 and a shell command that was not approved never runs.
+
+---
+
+## Web playground
+
+A public, browser version of the same agent: pick a bundled sample repo (TypeScript,
+Python, Go) or a small public GitHub repo, run **Ask**, **Plan** or **Agent**, watch the
+run stream live, then approve or reject each file and download a `.patch`.
+
+The overlay idea is what makes this safe to host. Each session gets a **virtual repo held
+entirely in memory**; the agent's real tool loop runs against it through the same
+`ToolExecutor`, with a `MemoryFS` behind it instead of the disk. Approving a file writes it
+to that virtual repo, never to the server.
+
+| Guarantee | How |
+| --- | --- |
+| No host filesystem | Tools run on `MemoryFS` (`web-demo/server/memory-fs.ts`); skills (which read the host disk) are off |
+| No shell | `execute_shell` is never exposed; the executor also refuses to run an approved command on anything but a real disk workspace |
+| No SSRF | GitHub import only ever builds a `codeload.github.com` URL from a validated `owner/repo`; `fetch_url` is never exposed; Firecrawl off by default |
+| Bounded cost | Per-IP run limits, a daily budget for the shared key, step caps per mode, `maxOutputTokens`, a run timeout, and a server-side model allowlist |
+| Bounded memory | Session TTL + caps, repo caps (300 files / 2 MB), per-write and overlay caps, tarball and unpacked-size caps |
+| Keys | Visitors may send their own OpenRouter key per request (`x-openrouter-key`); it's never stored or logged, and errors are scrubbed |
+
+### Run it locally
+
+```bash
+bun install
+bun run web          # dev server with HMR on http://localhost:5175 (uses .env)
+bun run web:mock     # same UI, scripted model, no OpenRouter requests
+bun run web:build && bun run web:start   # production build on $PORT (default 8788)
+```
+
+### Deploy (Docker / Railway)
+
+```bash
+docker build -t codefang-web .
+docker run --rm -p 8788:8788 --env-file .env codefang-web
+```
+
+`.env` is excluded from the image by `.dockerignore`; pass secrets as runtime env vars.
+`railway.json` builds the Dockerfile and health-checks `/healthz`. Railway sets `PORT`.
+
+| Variable | Required | Purpose |
+| --- | :---: | --- |
+| `OPENROUTER_API_KEY` | ✅* | Shared key for visitors without their own. *Without it, visitors must bring a key. |
+| `OPENROUTER_DEFAULT_MODEL` | ✅ | Model the shared key runs (always allowed). |
+| `PORT` | — | Listen port (default `8788`). |
+| `TRUST_PROXY_HOPS` | — | Set to `1` behind Railway's proxy so rate limits use the real client IP. |
+| `DEMO_SERVER_MODELS` | — | Extra comma-separated models allowed on the shared key. |
+| `DEMO_BYOK_MODELS` | — | Comma-separated models allowed with a visitor's own key (sensible default list). |
+| `DEMO_RUNS_PER_WINDOW` / `DEMO_RUNS_PER_WINDOW_BYOK` | — | Runs per IP per window (defaults 6 / 40). |
+| `DEMO_RATE_WINDOW_MS` | — | Rate-limit window (default 15 min). |
+| `DEMO_DAILY_RUN_BUDGET` | — | Total shared-key runs per UTC day (default 150). |
+| `DEMO_MAX_STEPS_AGENT` / `_ASK` / `_PLAN` / `_PLAN_EXEC` | — | Tool-step caps on the shared key (defaults 14 / 8 / 8 / 8). |
+| `DEMO_SESSION_TTL_MS` / `DEMO_MAX_SESSIONS` | — | Idle session lifetime (30 min) and global cap (200). |
+| `DEMO_GITHUB_IMPORT` | — | `0` disables GitHub import. |
+| `DEMO_WEB_TOOLS` + `FIRECRAWL_API_KEY` | — | `1` enables Firecrawl search/crawl in Ask/Plan. Off by default. |
 
 ---
 
@@ -202,6 +264,10 @@ modes/
   plan/                   planner, step selection, web tools
   ask/                    read-only Q&A
   telegram/               bot, handlers, plan and approval sessions
+web-demo/
+  server/                 Bun.serve API: sessions, SSE runs, review, limits, GitHub import
+  app/                    React frontend (landing + playground), bundled by Bun
+  samples/                the bundled sample repos
 ```
 
 ---
@@ -212,4 +278,7 @@ modes/
 bun start          # launch the CLI
 bun test           # run the test suite
 bun run typecheck  # tsc --noEmit
+bun run web        # web playground (dev)
+bun run web:build  # build the playground frontend
+bun run web:start  # serve the built playground
 ```

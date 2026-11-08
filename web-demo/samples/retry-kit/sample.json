@@ -1,0 +1,19 @@
+{
+  "name": "retry-kit",
+  "tagline": "Retry with exponential backoff. Has a capping bug.",
+  "language": "TypeScript",
+  "order": 1,
+  "prompts": {
+    "ask": [
+      "How is the delay between attempts computed?",
+      "What happens when every attempt fails?"
+    ],
+    "plan": [
+      "Add a shouldRetry option and AbortSignal support to retry()"
+    ],
+    "agent": [
+      "Fix the bug where a delay can exceed maxDelayMs, and add a test for it",
+      "Add an onRetry callback option that receives the attempt number and error"
+    ]
+  }
+}

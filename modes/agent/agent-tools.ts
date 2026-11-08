@@ -2,7 +2,58 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { ToolExecutor } from "./tool-executor";
 
-export function createAgentTools(executor: ToolExecutor) {
+export interface ToolSetOptions {
+  /** create/modify/delete/folder tools. Default true. */
+  write?: boolean;
+  /** execute_shell. Default true. Always off in the web playground. */
+  shell?: boolean;
+  /** list_skills/read_skill (read the host disk). Default true. */
+  skills?: boolean;
+}
+
+/**
+ * The agent's tool set. Capabilities that are switched off are not merely
+ * disabled at execution time: the tool is absent, so the model never sees it.
+ */
+export function createAgentTools(
+  executor: ToolExecutor,
+  opts: ToolSetOptions = {},
+) {
+  const { write = true, shell = true, skills = true } = opts;
+  const all = buildTools(executor);
+  const {
+    read_file,
+    list_files,
+    search_files,
+    analyze_codebase,
+    create_file,
+    modify_file,
+    delete_file,
+    create_folder,
+    execute_shell,
+    list_skills,
+    read_skill,
+  } = all;
+  return {
+    read_file,
+    list_files,
+    search_files,
+    analyze_codebase,
+    ...(write ? { create_file, modify_file, delete_file, create_folder } : {}),
+    ...(shell ? { execute_shell } : {}),
+    ...(skills ? { list_skills, read_skill } : {}),
+  };
+}
+
+/** Read-only research tools (Ask, Plan research). */
+export function createReadOnlyTools(
+  executor: ToolExecutor,
+  opts: Pick<ToolSetOptions, "skills"> = {},
+) {
+  return createAgentTools(executor, { ...opts, write: false, shell: false });
+}
+
+function buildTools(executor: ToolExecutor) {
   return {
     read_file: tool({
       description:
@@ -67,6 +118,7 @@ export function createAgentTools(executor: ToolExecutor) {
         root: z.string().describe("Directory to search, relative to root"),
         pattern: z
           .string()
+          .max(256)
           .describe("Glob-like pattern using * and ** (forward slashes)"),
         content_contains: z.string().optional(),
       }),

@@ -1,0 +1,68 @@
+/*
+ * CodeFang web tokens.
+ * Structure follows a neutral ink scale with 1px hairlines and one bright
+ * accent. The accent stays CodeFang's own violet (tui/theme.ts), cyan keeps
+ * meaning "you", and the material rule stays: dashed = staged in the
+ * overlay (RAM), solid = applied.
+ */
+:root {
+  color-scheme: dark;
+
+  /* neutral ink */
+  --ink-0: #0e0e0f; /* page */
+  --ink-1: #141415; /* recessed panes */
+  --ink-2: #1a1a1b; /* hover / raised */
+  --ink-3: #232325; /* active */
+  --ink-violet: #0e0e0f;
+  --line: #2a2a2c;
+  --line-strong: #3a3a3d;
+
+  --violet: #a78bfa;
+  --violet-hover: #bba5fc;
+  --violet-ink: #170f2c;
+  --violet-soft: rgb(167 139 250 / 0.5);
+  --violet-wash: rgb(167 139 250 / 0.07);
+  --deep: #5b4d9e;
+  --cyan: #67e8f9;
+  --cyan-hover: #95f0fb;
+  --cyan-ink: #061b1f;
+  --cyan-wash: rgb(103 232 249 / 0.07);
+  --cyan-soft: rgb(103 232 249 / 0.45);
+
+  --text: #fafafa;
+  --text-2: #a1a1a1;
+  --text-3: #d4d4d4;
+  --muted: #8b8b8f;
+  --faint: #5f5f63;
+
+  --add: #74e3a9;
+  --add-bg: rgb(116 227 169 / 0.09);
+  --del: #ff8fa3;
+  --del-bg: rgb(255 143 163 / 0.09);
+  --warn: #f3c56e;
+  --warn-bg: rgb(243 197 110 / 0.07);
+
+  --tk-keyword: #b9a0ff;
+  --tk-string: #e8c79a;
+  --tk-number: #f4a8c6;
+  --tk-comment: #6c6c72;
+
+  --sans: "Switzer", ui-sans-serif, system-ui, sans-serif;
+  --serif: "Sentient", Georgia, serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --r-sm: 4px;
+  --r: 8px;
+  --r-lg: 12px;
+
+  --gutter: clamp(1.25rem, 0.8rem + 2vw, 3rem);
+  --rail: 1060px;
+  --topbar: 64px;
+
+  --dots: radial-gradient(circle, rgb(255 255 255 / 0.07) 0.5px, transparent 1.2px);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --fast: 160ms;
+  --ui: 200ms;
+}
