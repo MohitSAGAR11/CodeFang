@@ -1,0 +1,3 @@
+[test]
+# Sample repos are fixtures served to the web playground, not part of this suite.
+pathIgnorePatterns = ["web-demo/samples/**", "web-demo/dist/**"]

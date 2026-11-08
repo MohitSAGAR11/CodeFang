@@ -6,7 +6,11 @@
   "scripts": {
     "start": "bun run index.ts wakeup",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "web": "PORT=5175 bun --hot web-demo/server/main.ts",
+    "web:mock": "PORT=5175 bun web-demo/scripts/dev-mock.ts",
+    "web:build": "bun web-demo/scripts/build.ts",
+    "web:start": "NODE_ENV=production bun web-demo/server/main.ts"
   },
   "bin": {
     "codefang": "./index.ts",
@@ -14,7 +18,9 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/marked-terminal": "^6.1.1"
+    "@types/marked-terminal": "^6.1.1",
+    "@types/react": "19",
+    "@types/react-dom": "19"
   },
   "peerDependencies": {
     "typescript": "^7"
@@ -22,6 +28,8 @@
   "dependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@mendable/firecrawl-js": "^4.41.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@types/node": "^26.6.2",
@@ -30,8 +38,12 @@
     "commander": "^15.0.0",
     "diff": "^9.0.0",
     "figlet": "^1.11.4",
+    "lucide-react": "^1.70.0",
     "marked": "^18.0.14",
     "marked-terminal": "^7.3.0",
-    "telegraf": "^4.16.3"
+    "react": "19",
+    "react-dom": "19",
+    "telegraf": "^4.16.3",
+    "zod": "3.25.76"
   }
 }

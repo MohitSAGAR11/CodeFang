@@ -29,11 +29,17 @@ export interface AgentConfig {
   codebasePath: string;
   maxFileSizeToRead: number;
   excludePatterns: string[];
+  /** Optional cap on a single staged write (web playground). */
+  maxWriteBytes?: number;
+  /** Optional cap on everything staged at once (web playground). */
+  maxOverlayBytes?: number;
   tools: {
     allowShellExecution: boolean;
     allowFileModification: boolean;
     allowFileCreation: boolean;
     allowFolderCreation: boolean;
+    /** Skills are read from the host disk; `false` disables them. Default on. */
+    allowSkills?: boolean;
   };
 }
 

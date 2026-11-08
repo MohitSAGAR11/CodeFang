@@ -1,0 +1,19 @@
+{
+  "name": "ledger",
+  "tagline": "A pocket expense tracker CLI. Uses floats for money.",
+  "language": "Python",
+  "order": 2,
+  "prompts": {
+    "ask": [
+      "Where is data stored, and in what format?",
+      "Walk me through what happens when I run `ledger add`"
+    ],
+    "plan": [
+      "Add a budget command that warns when a category goes over its monthly limit"
+    ],
+    "agent": [
+      "Store amounts as integer cents instead of floats, end to end",
+      "Reject zero or negative amounts in `add` with a clear error"
+    ]
+  }
+}
